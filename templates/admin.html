@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin REX DMG – CD78</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo-badge">CD78 – DSI</div>
+  <div>
+    <h1>Dashboard Admin – REX Full Cloud</h1>
+    <p class="subtitle">Direction des Moyens Généraux · Conseil Départemental des Yvelines</p>
+  </div>
+</header>
+
+<main>
+
+{% if login_page %}
+<!-- ─────────── LOGIN PAGE ─────────── -->
+<div class="login-wrap">
+  <div class="card">
+    <h2 style="color:var(--blue);margin-bottom:18px;text-align:center;">Accès administrateur</h2>
+    <form method="post" action="/admin/login">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#555;">Mot de passe</label>
+      <input type="password" name="password" autofocus placeholder="Mot de passe admin">
+      <button type="submit" class="btn btn-primary" style="width:100%;">Se connecter</button>
+    </form>
+  </div>
+</div>
+
+{% elif detail_view %}
+<!-- ─────────── DETAIL VIEW ─────────── -->
+<div class="admin-nav">
+  <a href="/admin" class="btn btn-secondary btn-sm">← Retour au tableau de bord</a>
+  <a href="/admin/logout" class="btn btn-sm" style="background:#eee;color:#333;">Déconnexion</a>
+</div>
+
+<div class="card">
+  <h2 style="color:var(--blue);margin-bottom:4px;">{{ respondent.nom_prenom }}</h2>
+  <p style="color:#555;font-size:13px;margin-bottom:16px;">
+    {{ respondent.service }} &nbsp;·&nbsp;
+    Complété le {{ respondent.date_completion }} &nbsp;·&nbsp;
+    Soumis le {{ respondent.date_soumission[:10] }}
+  </p>
+
+  <!-- per-section detail -->
+  {% set cur_sec = namespace(val=0) %}
+  {% for item in answers %}
+    {% set q_id = item.answer.question_id %}
+    {% set q_sec = namespace(val=0) %}
+    {% for qid, qlabel, qsec in questions %}
+      {% if qid == q_id %}{% set q_sec.val = qsec %}{% endif %}
+    {% endfor %}
+    {% if q_sec.val != cur_sec.val %}
+      {% if cur_sec.val != 0 %}</div>{% endif %}
+      {% set cur_sec.val = q_sec.val %}
+      <div class="section-block">
+      <div class="section-title">Section {{ q_sec.val }} – {{ sections[q_sec.val] }}</div>
+    {% endif %}
+
+    <div class="detail-answer">
+      <span class="q-num">{{ q_id }}</span>
+      <div>
+        <div>{{ item.label }}</div>
+        {% if item.answer.commentaire %}
+        <div class="detail-comment">"{{ item.answer.commentaire }}"</div>
+        {% endif %}
+      </div>
+      <div class="detail-note">
+        {% if item.answer.sans_objet %}
+          <span style="color:#888;font-size:13px;font-weight:normal;">Sans objet</span>
+        {% else %}
+          {% set n = item.answer.note %}
+          {% if n %}
+            <span class="avg-badge avg-{{ n }}">{{ n }}</span>
+          {% else %}
+            <span style="color:#aaa;">–</span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  </div><!-- close last section -->
+
+  {% if respondent.remarques_generales %}
+  <div style="margin-top:18px;">
+    <h3 style="font-size:14px;color:var(--blue);margin-bottom:8px;">Remarques générales</h3>
+    <p style="background:var(--blue-lt);padding:12px 16px;border-radius:6px;font-size:14px;line-height:1.6;">
+      {{ respondent.remarques_generales }}
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+<!-- ─────────── MAIN DASHBOARD ─────────── -->
+<div class="admin-nav">
+  <a href="/admin/export" class="btn btn-primary btn-sm">⬇ Exporter CSV</a>
+  <a href="/" class="btn btn-secondary btn-sm" target="_blank">Voir le formulaire</a>
+  <a href="/admin/logout" class="btn btn-sm" style="background:#eee;color:#333;">Déconnexion</a>
+  <span style="margin-left:auto;font-size:13px;color:#555;">{{ total }} répondant{{ 's' if total > 1 else '' }}</span>
+</div>
+
+<!-- Section averages -->
+<div class="section-stats">
+  {% for sec_id, sec_label in sections.items() %}
+  <div class="stat-card">
+    <div class="stat-label">{{ sec_label[:30] }}{% if sec_label|length > 30 %}…{% endif %}</div>
+    <div class="stat-val">
+      {% if section_avgs[sec_id] is not none %}
+        {{ "%.2f"|format(section_avgs[sec_id]) }}
+      {% else %}
+        <span style="font-size:18px;color:#aaa;">N/A</span>
+      {% endif %}
+    </div>
+    <div class="stat-sub">/ 4</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Radar chart -->
+{% if total > 0 %}
+<div class="card" style="margin-bottom:20px;">
+  <h3 style="color:var(--blue);font-size:15px;margin-bottom:12px;">Radar des sections</h3>
+  <div id="radar-container">
+    <canvas id="radarCanvas"
+      data-labels='{{ sections.values() | list | tojson }}'
+      data-values='{{ section_avgs.values() | list | tojson }}'
+    ></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- Filter + table -->
+<div class="card" style="padding:20px;">
+  <h3 style="color:var(--blue);font-size:15px;margin-bottom:14px;">Répondants</h3>
+
+  <div class="filter-bar">
+    <input type="text" id="service-filter" placeholder="Filtrer par service / équipe…" value="{{ service_filter }}">
+  </div>
+
+  {% if respondents %}
+  <div style="overflow-x:auto;">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Nom / Prénom</th>
+          <th>Service</th>
+          <th>Date</th>
+          <th>Moy. globale</th>
+        </tr>
+      </thead>
+      <tbody id="respondents-body">
+        {% for item in respondents %}
+        <tr data-service="{{ item.row.service | lower }}">
+          <td>{{ item.row.id }}</td>
+          <td>
+            <a href="/admin/detail/{{ item.row.id }}">{{ item.row.nom_prenom }}</a>
+          </td>
+          <td>{{ item.row.service }}</td>
+          <td>{{ item.row.date_completion }}</td>
+          <td>
+            {% if item.avg is not none %}
+              {% set av = item.avg %}
+              {% if av < 1.5 %}
+                <span class="avg-badge avg-1">{{ "%.2f"|format(av) }}</span>
+              {% elif av < 2.5 %}
+                <span class="avg-badge avg-2">{{ "%.2f"|format(av) }}</span>
+              {% elif av < 3.5 %}
+                <span class="avg-badge avg-3">{{ "%.2f"|format(av) }}</span>
+              {% else %}
+                <span class="avg-badge avg-4">{{ "%.2f"|format(av) }}</span>
+              {% endif %}
+            {% else %}
+              <span style="color:#aaa;font-size:13px;">–</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:#888;font-size:14px;text-align:center;padding:30px 0;">
+    Aucune réponse enregistrée pour l'instant.
+  </p>
+  {% endif %}
+</div>
+
+{% endif %}
+</main>
+
+<script src="/static/admin.js"></script>
+</body>
+</html>
