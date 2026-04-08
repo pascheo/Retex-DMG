@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REX Full Cloud – DMG CD78</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo-badge">CD78 – DSI</div>
+  <div>
+    <h1>Retour d'Expérience – POC Full Cloud</h1>
+    <p class="subtitle">Direction des Moyens Généraux · Conseil Départemental des Yvelines</p>
+  </div>
+</header>
+
+<!-- Live average bar -->
+<div class="live-avg-bar" id="avg-bar">
+  <div>
+    <span>Note moyenne en cours</span>
+    <span class="avg-legend">&nbsp;(questions notées uniquement)</span>
+  </div>
+  <div>
+    <span class="avg-val" id="avg-display">–</span>
+    <span style="font-size:14px"> / 4</span>
+  </div>
+</div>
+
+<main>
+
+  {% if success %}
+  <div class="alert alert-success">
+    <span class="alert-icon">✔</span>
+    <div>
+      <strong>Merci pour votre réponse&nbsp;!</strong>
+      Votre retour d'expérience a bien été enregistré.
+      {% if duplicate_warning %}
+      <br><em style="font-size:13px">Attention : une réponse avec le même nom pour cette date existait déjà.
+      Votre nouvelle réponse a quand même été enregistrée.</em>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if error %}
+  <div class="alert alert-error">
+    <span class="alert-icon">✖</span>
+    <div>{{ error }}</div>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/submit" id="rex-form">
+
+    <!-- ── Agent information ── -->
+    <div class="card">
+      <h2 style="font-size:16px;color:var(--blue);margin-bottom:16px;">Informations agent</h2>
+      <div class="info-grid">
+        <div>
+          <label for="nom_prenom">Nom &amp; Prénom *</label>
+          <input type="text" id="nom_prenom" name="nom_prenom" required placeholder="Prénom NOM" autocomplete="name">
+        </div>
+        <div>
+          <label for="service">Service / Équipe *</label>
+          <input type="text" id="service" name="service" required placeholder="Ex : Logistique, DSI…">
+        </div>
+        <div>
+          <label for="date_completion">Date de complétion</label>
+          <input type="date" id="date_completion" name="date_completion" value="{{ today }}">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Intro ── -->
+    <div class="card" style="background:var(--blue-lt);padding:14px 20px;">
+      <p style="font-size:13px;color:#333;line-height:1.6;">
+        Pour chaque question, indiquez votre niveau de satisfaction en sélectionnant une note de <strong>1 à 4</strong>
+        (1 = Très insatisfait · 2 = Plutôt insatisfait · 3 = Plutôt satisfait · 4 = Très satisfait).
+        Si la question ne s'applique pas à votre usage, cochez <strong>"Sans objet"</strong>.
+        Les commentaires sont facultatifs.
+      </p>
+    </div>
+
+    <!-- ── Questions by section ── -->
+    {% set current_section = namespace(val=0) %}
+    {% for q_id, q_label, q_section in questions %}
+      {% if q_section != current_section.val %}
+        {% if current_section.val != 0 %}</div>{% endif %}
+        {% set current_section.val = q_section %}
+        <div class="section-block">
+        <div class="section-title">Section {{ q_section }} – {{ sections[q_section] }}</div>
+      {% endif %}
+
+      <div class="question-row" id="qrow-{{ q_id }}">
+        <div class="question-header">
+          <span class="q-num">{{ q_id }}</span>
+          <span class="q-label">{{ q_label }}</span>
+        </div>
+
+        <div class="rating-row">
+          {% for val, lbl in [(1,'Très\ninsatisfait'), (2,'Plutôt\ninsatisfait'), (3,'Plutôt\nsatisfait'), (4,'Très\nsatisfait')] %}
+          <input type="radio" class="rating-option" name="note_{{ q_id }}" id="note_{{ q_id }}_{{ val }}" value="{{ val }}">
+          <label for="note_{{ q_id }}_{{ val }}">
+            <span class="score">{{ val }}</span>
+            {{ lbl | replace('\n', '<br>') | safe }}
+          </label>
+          {% endfor %}
+
+          <label class="sans-objet-wrap">
+            <input type="checkbox" name="sans_objet_{{ q_id }}" id="so_{{ q_id }}" onchange="toggleSansObjet({{ q_id }}, this.checked)">
+            Sans objet
+          </label>
+        </div>
+
+        <div class="commentaire-wrap">
+          <label for="com_{{ q_id }}">Commentaire (facultatif)</label>
+          <textarea id="com_{{ q_id }}" name="commentaire_{{ q_id }}" rows="2" placeholder="Précisez si nécessaire…"></textarea>
+        </div>
+      </div>
+
+    {% endfor %}
+    </div><!-- close last section block -->
+
+    <!-- ── Remarques générales ── -->
+    <div class="card">
+      <h2 style="font-size:15px;color:var(--blue);margin-bottom:12px;">Remarques générales &amp; Suggestions</h2>
+      <div class="general-remarks">
+        <textarea name="remarques_generales" rows="5" placeholder="Partagez vos impressions globales, difficultés rencontrées, suggestions d'amélioration…"></textarea>
+      </div>
+    </div>
+
+    <!-- ── Submit ── -->
+    <div class="card" style="padding:16px 24px;">
+      <div class="form-footer">
+        <p style="font-size:13px;color:#555;">* Champs obligatoires</p>
+        <button type="submit" class="btn btn-primary">Envoyer mon retour d'expérience</button>
+      </div>
+    </div>
+
+  </form>
+</main>
+
+<script>
+// ── Live average ──
+function calcAvg() {
+  const radios = document.querySelectorAll('input.rating-option:checked');
+  let sum = 0, count = 0;
+  radios.forEach(r => {
+    const qId = r.name.replace('note_', '');
+    const so = document.getElementById('so_' + qId);
+    if (!so || !so.checked) { sum += parseInt(r.value, 10); count++; }
+  });
+  const display = document.getElementById('avg-display');
+  display.textContent = count > 0 ? (sum / count).toFixed(2) : '–';
+}
+
+document.querySelectorAll('input.rating-option').forEach(r => r.addEventListener('change', calcAvg));
+
+// ── Sans objet toggle ──
+function toggleSansObjet(qId, checked) {
+  const row = document.getElementById('qrow-' + qId);
+  if (checked) {
+    row.classList.add('is-sans-objet');
+    document.querySelectorAll('input[name="note_' + qId + '"]').forEach(r => r.checked = false);
+  } else {
+    row.classList.remove('is-sans-objet');
+  }
+  calcAvg();
+}
+</script>
+
+</body>
+</html>
