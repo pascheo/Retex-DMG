@@ -26,7 +26,7 @@ QUESTIONS = [
     (7, "Navigation dans les bibliothèques de documents SharePoint", 2),
     (8, "Recherche de documents dans SharePoint", 2),
     (9, "Partage et collaboration sur des documents SharePoint", 2),
-    (10, "Synchronisation et accès hors connexion aux documents", 2),
+    (10, "Gestion des droits d'accès et confidentialité des documents", 2),
     # Section 3 – Outils bureautiques en ligne
     (11, "Utilisation de Word en version web (création, édition de documents)", 3),
     (12, "Utilisation d'Excel en version web (tableurs, formules)", 3),
